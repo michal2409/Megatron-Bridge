@@ -8,6 +8,7 @@ Kimi model documentation is organized by model variant.
 kimi-k2.md
 kimi-k25-vl.md
 kimi-k3.md
+kimi-linear.md
 ```
 
 | Variant | Guide |
@@ -15,3 +16,4 @@ kimi-k3.md
 | Kimi K2 | [kimi-k2.md](kimi-k2.md) |
 | Kimi-K2.5-VL | [kimi-k25-vl.md](kimi-k25-vl.md) |
 | Kimi K3 | [kimi-k3.md](kimi-k3.md) |
+| Kimi Linear | [kimi-linear.md](kimi-linear.md) |

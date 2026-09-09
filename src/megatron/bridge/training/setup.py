@@ -775,6 +775,18 @@ def _validate_and_set_vocab_size(
         # Enable padding since this came from tokenizer
         return tokenizer_vocab_size, True
     elif model_vocab_size < tokenizer_vocab_size:
+        overhang = tokenizer_vocab_size - model_vocab_size
+        if overhang <= 8:
+            # Some tokenizers declare a few trailing reserved placeholder ids
+            # beyond the model's embedding (e.g. Kimi Linear's two
+            # <|reserved_token_*|> ids past its 163840-row embedding). Keep the
+            # checkpoint's vocab size; those ids must never appear in data.
+            logging.warning(
+                f"Tokenizer vocab_size ({tokenizer_vocab_size}) exceeds the model vocab_size "
+                f"({model_vocab_size}) by {overhang} trailing ids; keeping the model vocab size. "
+                "Inputs containing those ids would fail the embedding lookup."
+            )
+            return model_vocab_size, False
         # Vocab size smaller than tokenizer
         raise ValueError(
             f"Model vocab_size ({model_vocab_size}) cannot be smaller than tokenizer's vocab_size "
