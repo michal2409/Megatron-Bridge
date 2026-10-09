@@ -544,6 +544,46 @@ class TestTEFusedLoRALinear:
         assert output.shape == (3, 5)
         assert bias is None
 
+    def _make_dropout_lora(self, te_linear):
+        """Return a TEFusedLoRALinear with LoRA dropout 0.5 and a nonzero LoRA B weight."""
+        adapter = self._make_parallel_linear_adapter(dropout=0.5)
+        with torch.no_grad():
+            adapter.linear_out.weight.normal_()
+        return TEFusedLoRALinear(te_linear, adapter)
+
+    def test_fused_lora_linear_dropout_follows_mode(self, te_linear):
+        """model.eval() turns off the te.ops Dropout of the fused LoRA branch, and model.train() turns it on."""
+        fused_lora = self._make_dropout_lora(te_linear)
+        x = torch.randn(64, 10, device="cuda")
+        with torch.no_grad():
+            train_out1, _ = fused_lora(x)
+            train_out2, _ = fused_lora(x)
+        assert not torch.equal(train_out1, train_out2)
+
+        dropouts = [
+            op for branch in fused_lora._fused_branches for op in branch.modules() if isinstance(op, te.ops.Dropout)
+        ]
+        assert dropouts and all(op.training for op in dropouts)
+
+        fused_lora.eval()
+        assert not any(op.training for op in dropouts)
+        with torch.no_grad():
+            eval_out1, _ = fused_lora(x)
+            eval_out2, _ = fused_lora(x)
+        assert torch.equal(eval_out1, eval_out2)
+
+        fused_lora.train()
+        assert all(op.training for op in dropouts)
+
+    def test_fused_lora_linear_branches_built_in_eval_mode(self, te_linear):
+        """Fused branches that the first forward builds in eval mode have no dropout."""
+        fused_lora = self._make_dropout_lora(te_linear).eval()
+        x = torch.randn(64, 10, device="cuda")
+        with torch.no_grad():
+            out1, _ = fused_lora(x)
+            out2, _ = fused_lora(x)
+        assert torch.equal(out1, out2)
+
     def test_fused_lora_linear_unsupported_normalization(self, te_linear, parallel_linear_adapter):
         """Test TEFusedLoRALinear with unsupported normalization type."""
         # Manually create a LayerNormLinear with an unsupported normalization

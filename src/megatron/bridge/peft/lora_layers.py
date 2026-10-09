@@ -114,6 +114,18 @@ class TEFusedLoRALinear(LoRALinear):
         super().__init__(to_wrap, adapter)
         self._fused_branches: Optional[tuple[te.ops.Sequential, te.ops.Sequential]] = None
 
+    def train(self, mode: bool = True) -> "TEFusedLoRALinear":
+        """Set the train or eval mode, also of the fused branches.
+
+        The fused branches are not submodules, so nn.Module.train does not reach them. The
+        te.ops Dropout of the LoRA branch must follow the mode, so that eval has no dropout.
+        """
+        super().train(mode)
+        if self._fused_branches is not None:
+            for branch in self._fused_branches:
+                branch.train(mode)
+        return self
+
     def _make_fused_branches(self) -> tuple[te.ops.Sequential, te.ops.Sequential]:
         """Construct fused modules for main and LoRA branches"""
 
@@ -178,6 +190,9 @@ class TEFusedLoRALinear(LoRALinear):
 
             lora_branch.register_forward_hook(forward_post_hook)
 
+        # The branches start in the mode of this module (see train()).
+        main_branch.train(self.training)
+        lora_branch.train(self.training)
         return main_branch, lora_branch
 
     def _make_main_branch(
